@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Meeting Summarizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#12151b;
+    --surface:#1a1f28;
+    --surface-raised:#212836;
+    --border:#2b3342;
+    --text:#e7eaf0;
+    --text-muted:#8b93a5;
+    --accent:#e8a33d;      /* recording-light amber */
+    --accent-dim:#7a5a26;
+    --teal:#4fbdba;        /* completed / decisions */
+    --danger:#e2604f;
+    --radius:10px;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:
+      radial-gradient(1200px 600px at 50% -10%, #1b2130 0%, var(--bg) 60%);
+    color:var(--text);
+    font-family:'Inter', system-ui, sans-serif;
+    min-height:100vh;
+    padding:48px 20px 80px;
+  }
+  .wrap{ max-width:760px; margin:0 auto; }
+
+  header{ margin-bottom:36px; }
+  .eyebrow{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--accent);
+    display:flex; align-items:center; gap:8px;
+    margin-bottom:10px;
+  }
+  .eyebrow .dot{
+    width:7px; height:7px; border-radius:50%;
+    background:var(--accent);
+    box-shadow:0 0 8px 1px var(--accent);
+  }
+  h1{
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:700;
+    font-size:32px;
+    margin:0 0 8px;
+    letter-spacing:-0.01em;
+  }
+  .sub{ color:var(--text-muted); font-size:15px; line-height:1.5; max-width:520px; }
+
+  .panel{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:28px;
+    margin-bottom:20px;
+  }
+
+  /* --- Dropzone (tape-deck slot) --- */
+  .dropzone{
+    border:1.5px dashed var(--border);
+    border-radius:var(--radius);
+    padding:36px 20px;
+    text-align:center;
+    cursor:pointer;
+    transition:border-color .15s ease, background .15s ease;
+    position:relative;
+  }
+  .dropzone:hover, .dropzone.dragover{
+    border-color:var(--accent-dim);
+    background:rgba(232,163,61,0.04);
+  }
+  .dropzone .slot-icon{
+    width:44px; height:44px; margin:0 auto 14px;
+    border-radius:8px;
+    border:1.5px solid var(--border);
+    display:flex; align-items:center; justify-content:center;
+    background:var(--surface-raised);
+  }
+  .dropzone .slot-icon svg{ width:20px; height:20px; }
+  .dropzone .label{ font-size:14px; color:var(--text); margin-bottom:4px; }
+  .dropzone .hint{ font-size:12.5px; color:var(--text-muted); font-family:'IBM Plex Mono', monospace; }
+  input[type=file]{ display:none; }
+
+  .filename-row{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-top:16px; padding-top:16px; border-top:1px solid var(--border);
+    font-family:'IBM Plex Mono', monospace; font-size:13px; color:var(--text-muted);
+  }
+  .filename-row strong{ color:var(--text); font-weight:500; }
+
+  button.primary{
+    margin-top:18px;
+    width:100%;
+    background:var(--accent);
+    color:#1a1206;
+    border:none;
+    padding:13px 18px;
+    border-radius:8px;
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:600;
+    font-size:14.5px;
+    cursor:pointer;
+    transition:filter .12s ease, transform .05s ease;
+  }
+  button.primary:hover{ filter:brightness(1.08); }
+  button.primary:active{ transform:translateY(1px); }
+  button.primary:disabled{
+    background:var(--surface-raised); color:var(--text-muted); cursor:not-allowed;
+  }
+
+  /* --- Progress: waveform-style stage meter --- */
+  .stage-row{
+    display:flex; align-items:center; gap:12px; margin-bottom:14px;
+  }
+  .stage-label{
+    font-family:'IBM Plex Mono', monospace; font-size:12.5px; color:var(--text-muted);
+    letter-spacing:.03em;
+  }
+  .waveform{
+    display:flex; align-items:flex-end; gap:3px; height:34px; flex:1;
+  }
+  .waveform .bar{
+    flex:1; background:var(--border); border-radius:2px;
+    min-width:2px;
+    transition:background .3s ease;
+  }
+  .waveform.active .bar{
+    animation:pulse 1.1s ease-in-out infinite;
+    background:var(--accent-dim);
+  }
+  .waveform.active .bar:nth-child(odd){ animation-delay:.15s; }
+  .waveform.active .bar:nth-child(3n){ animation-delay:.3s; }
+  .waveform.done .bar{ background:var(--teal); animation:none; height:60% !important; }
+  .waveform.failed .bar{ background:var(--danger); animation:none; height:35% !important; }
+  @keyframes pulse{
+    0%,100%{ height:20%; }
+    50%{ height:85%; }
+  }
+  .status-text{ font-size:13.5px; color:var(--text-muted); }
+  .status-text.error{ color:var(--danger); }
+  .job-id{
+    font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--text-muted);
+    margin-top:10px; word-break:break-all;
+  }
+
+  /* --- Results --- */
+  .section-title{
+    font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:14px;
+    text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted);
+    margin:0 0 14px; display:flex; align-items:center; gap:8px;
+  }
+  .section-title .swatch{ width:8px; height:8px; border-radius:2px; }
+  .summary-text{ font-size:15px; line-height:1.65; color:var(--text); }
+
+  .decision-item{
+    padding:12px 0; border-bottom:1px solid var(--border);
+  }
+  .decision-item:last-child{ border-bottom:none; }
+  .decision-item .d-text{ font-size:14.5px; line-height:1.5; }
+  .decision-item .d-context{ font-size:13px; color:var(--text-muted); margin-top:4px; }
+
+  .action-item{
+    display:flex; align-items:flex-start; gap:12px;
+    padding:14px 0; border-bottom:1px solid var(--border);
+  }
+  .action-item:last-child{ border-bottom:none; }
+  .priority-dot{
+    width:9px; height:9px; border-radius:50%; margin-top:6px; flex-shrink:0;
+  }
+  .priority-dot.high{ background:var(--danger); box-shadow:0 0 6px 0 rgba(226,96,79,.6); }
+  .priority-dot.medium{ background:var(--accent); box-shadow:0 0 6px 0 rgba(232,163,61,.5); }
+  .priority-dot.low{ background:var(--text-muted); }
+  .action-body{ flex:1; }
+  .action-task{ font-size:14.5px; line-height:1.45; }
+  .action-meta{
+    display:flex; gap:14px; margin-top:6px; flex-wrap:wrap;
+    font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--text-muted);
+  }
+  .action-meta span strong{ color:var(--text); font-weight:500; }
+
+  .empty-note{ font-size:13.5px; color:var(--text-muted); font-style:italic; }
+
+  .transcript-toggle{
+    background:none; border:1px solid var(--border); color:var(--text-muted);
+    font-family:'IBM Plex Mono', monospace; font-size:12px;
+    padding:8px 14px; border-radius:6px; cursor:pointer;
+  }
+  .transcript-toggle:hover{ border-color:var(--accent-dim); color:var(--text); }
+  .transcript-box{
+    margin-top:14px; max-height:340px; overflow-y:auto;
+    background:var(--bg); border:1px solid var(--border); border-radius:8px;
+    padding:16px; font-family:'IBM Plex Mono', monospace; font-size:12.5px;
+    line-height:1.6; color:var(--text-muted); white-space:pre-wrap;
+  }
+
+  .hidden{ display:none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow"><span class="dot"></span>Meeting Summarizer</div>
+    <h1>Turn a recording into a task list.</h1>
+    <p class="sub">Upload a meeting audio file. It's transcribed, then read for decisions, action items, and an executive summary — with assignees, deadlines, and priority.</p>
+  </header>
+
+  <section class="panel" id="upload-panel">
+    <div class="dropzone" id="dropzone">
+      <div class="slot-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#8b93a5" stroke-width="1.6"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 19h16"/></svg>
+      </div>
+      <div class="label">Drop an audio file, or click to browse</div>
+      <div class="hint">mp3 · wav · m4a · flac · ogg · aac · webm — up to 500MB</div>
+      <input type="file" id="file-input" accept=".mp3,.mp4,.mpeg,.mpga,.m4a,.wav,.webm,.ogg,.flac,.aac" />
+    </div>
+    <div class="filename-row hidden" id="filename-row">
+      <span>Selected: <strong id="filename-text"></strong></span>
+      <span id="filesize-text"></span>
+    </div>
+    <button class="primary" id="upload-btn" disabled>Process meeting</button>
+  </section>
+
+  <section class="panel hidden" id="progress-panel">
+    <div class="stage-row">
+      <div class="waveform" id="waveform"></div>
+    </div>
+    <div class="status-text" id="status-text">Queued</div>
+    <div class="job-id" id="job-id-text"></div>
+  </section>
+
+  <section class="panel hidden" id="results-panel">
+    <div class="section-title"><span class="swatch" style="background:var(--accent)"></span>Executive Summary</div>
+    <div class="summary-text" id="summary-text"></div>
+  </section>
+
+  <section class="panel hidden" id="decisions-panel">
+    <div class="section-title"><span class="swatch" style="background:var(--teal)"></span>Key Decisions</div>
+    <div id="decisions-list"></div>
+  </section>
+
+  <section class="panel hidden" id="actions-panel">
+    <div class="section-title"><span class="swatch" style="background:var(--danger)"></span>Action Items</div>
+    <div id="actions-list"></div>
+  </section>
+
+  <section class="panel hidden" id="transcript-panel">
+    <div class="section-title" style="margin-bottom:12px;"><span class="swatch" style="background:var(--text-muted)"></span>Full Transcript</div>
+    <button class="transcript-toggle" id="transcript-toggle">Show transcript</button>
+    <div class="transcript-box hidden" id="transcript-box"></div>
+  </section>
+</div>
+
+<script>
+const API_BASE = '/api';
+const BAR_COUNT = 40;
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('file-input');
+const filenameRow = document.getElementById('filename-row');
+const filenameText = document.getElementById('filename-text');
+const filesizeText = document.getElementById('filesize-text');
+const uploadBtn = document.getElementById('upload-btn');
+const uploadPanel = document.getElementById('upload-panel');
+const progressPanel = document.getElementById('progress-panel');
+const waveform = document.getElementById('waveform');
+const statusText = document.getElementById('status-text');
+const jobIdText = document.getElementById('job-id-text');
+const resultsPanel = document.getElementById('results-panel');
+const summaryText = document.getElementById('summary-text');
+const decisionsPanel = document.getElementById('decisions-panel');
+const decisionsList = document.getElementById('decisions-list');
+const actionsPanel = document.getElementById('actions-panel');
+const actionsList = document.getElementById('actions-list');
+const transcriptPanel = document.getElementById('transcript-panel');
+const transcriptToggle = document.getElementById('transcript-toggle');
+const transcriptBox = document.getElementById('transcript-box');
+
+let selectedFile = null;
+let pollHandle = null;
+
+// build waveform bars
+for (let i = 0; i < BAR_COUNT; i++) {
+  const bar = document.createElement('div');
+  bar.className = 'bar';
+  bar.style.height = (15 + Math.random() * 30) + '%';
+  waveform.appendChild(bar);
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function pickFile(file) {
+  selectedFile = file;
+  filenameText.textContent = file.name;
+  filesizeText.textContent = formatBytes(file.size);
+  filenameRow.classList.remove('hidden');
+  uploadBtn.disabled = false;
+}
+
+dropzone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', (e) => {
+  if (e.target.files && e.target.files[0]) pickFile(e.target.files[0]);
+});
+['dragenter', 'dragover'].forEach(evt =>
+  dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.add('dragover'); })
+);
+['dragleave', 'drop'].forEach(evt =>
+  dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.remove('dragover'); })
+);
+dropzone.addEventListener('drop', (e) => {
+  if (e.dataTransfer.files && e.dataTransfer.files[0]) pickFile(e.dataTransfer.files[0]);
+});
+
+const STAGE_LABELS = {
+  pending: 'Queued',
+  validating: 'Validating file',
+  preprocessing_audio: 'Preprocessing audio',
+  transcribing: 'Transcribing',
+  extracting_insights: 'Extracting insights',
+  completed: 'Complete',
+  failed: 'Failed',
+};
+
+uploadBtn.addEventListener('click', async () => {
+  if (!selectedFile) return;
+  uploadBtn.disabled = true;
+  uploadBtn.textContent = 'Uploading…';
+
+  const formData = new FormData();
+  formData.append('file', selectedFile);
+
+  try {
+    const res = await fetch(`${API_BASE}/meetings`, { method: 'POST', body: formData });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || 'Upload failed');
+    }
+    const job = await res.json();
+    uploadPanel.classList.add('hidden');
+    progressPanel.classList.remove('hidden');
+    waveform.classList.add('active');
+    jobIdText.textContent = `job ${job.job_id}`;
+    startPolling(job.job_id);
+  } catch (err) {
+    uploadBtn.disabled = false;
+    uploadBtn.textContent = 'Process meeting';
+    statusText.textContent = err.message;
+    statusText.classList.add('error');
+  }
+});
+
+function startPolling(jobId) {
+  pollHandle = setInterval(() => pollJob(jobId), 2500);
+  pollJob(jobId);
+}
+
+async function pollJob(jobId) {
+  try {
+    const res = await fetch(`${API_BASE}/meetings/${jobId}`);
+    if (!res.ok) throw new Error('Lost connection to job.');
+    const data = await res.json();
+
+    statusText.textContent = STAGE_LABELS[data.status] || data.status;
+
+    if (data.status === 'failed') {
+      clearInterval(pollHandle);
+      waveform.classList.remove('active');
+      waveform.classList.add('failed');
+      statusText.textContent = data.error || 'Processing failed.';
+      statusText.classList.add('error');
+      return;
+    }
+
+    if (data.status === 'completed') {
+      clearInterval(pollHandle);
+      waveform.classList.remove('active');
+      waveform.classList.add('done');
+      renderResults(data);
+    }
+  } catch (err) {
+    clearInterval(pollHandle);
+    waveform.classList.remove('active');
+    waveform.classList.add('failed');
+    statusText.textContent = err.message;
+    statusText.classList.add('error');
+  }
+}
+
+function renderResults(data) {
+  const insights = data.insights;
+  const transcript = data.transcript;
+
+  summaryText.textContent = insights.executive_summary;
+  resultsPanel.classList.remove('hidden');
+
+  decisionsList.innerHTML = '';
+  if (insights.key_decisions.length === 0) {
+    decisionsList.innerHTML = '<div class="empty-note">No explicit decisions were identified in this meeting.</div>';
+  } else {
+    insights.key_decisions.forEach(d => {
+      const el = document.createElement('div');
+      el.className = 'decision-item';
+      el.innerHTML = `<div class="d-text">${escapeHtml(d.decision)}</div>` +
+        (d.context ? `<div class="d-context">${escapeHtml(d.context)}</div>` : '');
+      decisionsList.appendChild(el);
+    });
+  }
+  decisionsPanel.classList.remove('hidden');
+
+  actionsList.innerHTML = '';
+  if (insights.action_items.length === 0) {
+    actionsList.innerHTML = '<div class="empty-note">No action items were identified in this meeting.</div>';
+  } else {
+    const priorityOrder = { high: 0, medium: 1, low: 2 };
+    const sorted = [...insights.action_items].sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+    sorted.forEach(a => {
+      const el = document.createElement('div');
+      el.className = 'action-item';
+      el.innerHTML = `
+        <div class="priority-dot ${a.priority}"></div>
+        <div class="action-body">
+          <div class="action-task">${escapeHtml(a.task)}</div>
+          <div class="action-meta">
+            <span>Assignee: <strong>${escapeHtml(a.assignee || '—')}</strong></span>
+            <span>Deadline: <strong>${escapeHtml(a.deadline || '—')}</strong></span>
+            <span>Priority: <strong>${a.priority}</strong></span>
+          </div>
+        </div>`;
+      actionsList.appendChild(el);
+    });
+  }
+  actionsPanel.classList.remove('hidden');
+
+  transcriptBox.textContent = transcript.full_text;
+  transcriptPanel.classList.remove('hidden');
+}
+
+transcriptToggle.addEventListener('click', () => {
+  const showing = !transcriptBox.classList.contains('hidden');
+  transcriptBox.classList.toggle('hidden');
+  transcriptToggle.textContent = showing ? 'Show transcript' : 'Hide transcript';
+});
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+</script>
+</body>
+</html>
