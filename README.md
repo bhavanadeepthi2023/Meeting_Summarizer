@@ -119,3 +119,7 @@ All credentials and pipeline settings are configured via environment variables:
 - The in-memory `JOB_STORE` dictionary does not survive a server restart and cannot be shared across multiple Uvicorn workers. Replace with a Redis instance for production multi-worker scaling.
 - Faster-Whisper does not perform speaker diarization; action-item assignees are extracted via LLM contextual inference from names referenced in dialogue.
 - Authentication is not enabled by default on the API routes; add JWT/OAuth2 middleware before exposing the service on a public network.
+
+## Demo Video
+
+[Watch Demo Video on Google Drive](https://drive.google.com/file/d/1vYWnpGMxAv0ILCVVEGq2HPUJO0GFhtRe/view?usp=drive_link)
